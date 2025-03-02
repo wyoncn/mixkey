@@ -31,15 +31,15 @@ impl Signature {
     /// signature key from bytes
     pub fn from_bytes(raw: &[u8]) -> Result<Self> {
         match raw.len() {
-            SIGNATURE_ED25519_SIZE => Ok(Self::ED25519(
-                <[u8; SIGNATURE_ED25519_SIZE]>::try_from(raw)?,
-            )),
+            SIGNATURE_ED25519_SIZE => Ok(Self::ED25519(<[u8; SIGNATURE_ED25519_SIZE]>::try_from(
+                raw,
+            )?)),
             SIGNATURE_BLS12381_SIZE => Ok(Self::BLS12381(
                 <[u8; SIGNATURE_BLS12381_SIZE]>::try_from(raw)?,
             )),
-            _ => Ok(Self::SECP256K1(
-                <[u8; SIGNATURE_SECP256K1_SIZE]>::try_from(raw)?,
-            )), // 65
+            _ => Ok(Self::SECP256K1(<[u8; SIGNATURE_SECP256K1_SIZE]>::try_from(
+                raw,
+            )?)), // 65
         }
     }
 
@@ -229,5 +229,27 @@ impl SignatureSecp256k1 for secp256k1::SecretKey {
             ]
             .concat(),
         )
+    }
+}
+
+#[cfg(test)]
+pub mod tests {
+    use ed25519_dalek::ed25519::signature::SignerMut;
+
+    use crate::SecretKey;
+
+    use super::*;
+
+    #[test]
+    pub fn ed25519_sign() {
+        let body = "Your identity needs to be verified in order to authorize subsequent actions 4";
+        let seckey =
+            SecretKey::from_str("eeb6feb296871a7e123dc82515dbfd599df380ea29614a4ff1976ab7ca075d37")
+                .unwrap();
+        let mut secret = seckey.to_ed25519();
+        let sig = secret.sign(body.as_ref()).to_vec();
+        let sig_str: String = sig.to_hex();
+        println!("{}", sig_str);
+        assert!(sig_str == "a4a7304a54ec72a393c87ee51a4bae89b9d0c8de715e331c0d5c8341a21da1f01ea6c71e27436ffb77629d3e3e5dcdae1c69b9c298d173a01695b9c14bb66d01");
     }
 }

@@ -5,25 +5,19 @@ use crate::{
     signature::{keccak256, sha3_256},
 };
 use rustc_hex::{FromHex, ToHex};
-use secp256k1::{
-    ecdsa::{RecoverableSignature, RecoveryId},
-    Message,
-};
 use sha2::Sha256;
 use sha3::{Digest, Keccak256};
 use std::{fmt, u8};
 
 const ADDRESS_ETH_SIZE: usize = 20;
-const ADDRESS_SOL_SIZE: usize = 32;
+const ADDRESS_B32_SIZE: usize = 32;
 const ADDRESS_TRX_SIZE: usize = 21;
-const ADDRESS_EDS_SIZE: usize = 32;
 
 #[derive(Clone, Hash, PartialEq, Eq)]
 pub enum Address {
     ETH([u8; ADDRESS_ETH_SIZE]),
-    SOL([u8; ADDRESS_SOL_SIZE]),
+    B32([u8; ADDRESS_B32_SIZE]),
     TRX([u8; ADDRESS_TRX_SIZE]),
-    EDS([u8; ADDRESS_EDS_SIZE]),
 }
 
 /// 默认地址
@@ -59,7 +53,7 @@ impl Address {
             .unwrap()
             .to_bytes();
 
-        Self::SOL(raw)
+        Self::B32(raw)
     }
 
     // tron address from secretkey
@@ -90,7 +84,7 @@ impl Address {
 
         raw.push(0);
 
-        Self::SOL(sha3_256(&raw))
+        Self::B32(sha3_256(&raw))
     }
 
     /// is zero address
@@ -98,9 +92,8 @@ impl Address {
         use Address::*;
         match self {
             ETH(raw) => raw == &[0x0; ADDRESS_ETH_SIZE],
-            SOL(raw) => raw == &[0x0; ADDRESS_SOL_SIZE],
+            B32(raw) => raw == &[0x0; ADDRESS_B32_SIZE],
             TRX(raw) => raw == &[0x0; ADDRESS_TRX_SIZE],
-            EDS(raw) => raw == &[0x0; ADDRESS_EDS_SIZE],
         }
     }
 
@@ -109,9 +102,8 @@ impl Address {
         use Address::*;
         match self {
             ETH(raw) => &raw[..],
-            SOL(raw) => &raw[..],
+            B32(raw) => &raw[..],
             TRX(raw) => &raw[..],
-            EDS(raw) => &raw[..],
         }
     }
 
@@ -119,20 +111,20 @@ impl Address {
     pub fn from_bytes(raw: &[u8]) -> Result<Self> {
         match raw.len() {
             ADDRESS_ETH_SIZE => Ok(Self::ETH(<[u8; ADDRESS_ETH_SIZE]>::try_from(raw)?)),
+            ADDRESS_B32_SIZE => Ok(Self::B32(<[u8; ADDRESS_B32_SIZE]>::try_from(raw)?)),
             ADDRESS_TRX_SIZE => Ok(Self::TRX(<[u8; ADDRESS_TRX_SIZE]>::try_from(raw)?)),
-            ADDRESS_SOL_SIZE => Ok(Self::SOL(<[u8; ADDRESS_SOL_SIZE]>::try_from(raw)?)),
             _ => Err(Error::InvalidAddress)?,
         }
     }
 
     /// from sol bytes
     pub fn sol_from_bytes(raw: &[u8]) -> Result<Self> {
-        Ok(Self::EDS(<[u8; ADDRESS_SOL_SIZE]>::try_from(raw)?))
+        Ok(Self::B32(<[u8; ADDRESS_B32_SIZE]>::try_from(raw)?))
     }
 
     /// from eds bytes
     pub fn eds_from_bytes(raw: &[u8]) -> Result<Self> {
-        Ok(Self::EDS(<[u8; ADDRESS_EDS_SIZE]>::try_from(raw)?))
+        Ok(Self::B32(<[u8; ADDRESS_B32_SIZE]>::try_from(raw)?))
     }
 
     /// from eds bytes
@@ -236,7 +228,7 @@ impl Address {
     /// to sol string, base58
     pub fn to_sol(&self) -> Result<String> {
         let raw = match self {
-            Self::SOL(raw) => raw,
+            Self::B32(raw) => raw,
             _ => Err(Error::InvalidAddress)?,
         };
         Ok(bs58::encode(raw).into_string())
@@ -245,7 +237,7 @@ impl Address {
     /// to eds string, base58
     pub fn to_eds(&self) -> Result<String> {
         let raw = match self {
-            Self::EDS(raw) => raw,
+            Self::B32(raw) => raw,
             _ => Err(Error::InvalidAddress)?,
         };
         Ok(bs58::encode(raw).into_string())
@@ -262,9 +254,8 @@ impl Address {
         use Address::*;
         match self {
             ETH(_) => self.to_eth().unwrap(),
-            SOL(_) => self.to_sol().unwrap(),
+            B32(_) => self.to_sol().unwrap(),
             TRX(_) => self.to_trx().unwrap(),
-            EDS(_) => self.to_eds().unwrap(),
         }
     }
 
@@ -279,7 +270,7 @@ impl Address {
                         .unwrap(),
                 )
             }
-            PublicKey::ED25519(pubkey) => Self::SOL(pubkey.clone()),
+            PublicKey::ED25519(pubkey) => Self::B32(pubkey.clone()),
             PublicKey::BLS12381(_) => panic!("BLS12381 not address"),
         }
     }
@@ -293,7 +284,7 @@ impl Address {
             PublicKey::ED25519(raw) => {
                 let mut raw = raw.to_vec();
                 raw.push(0);
-                Ok(Self::EDS(sha3_256(&raw)))
+                Ok(Self::B32(sha3_256(&raw)))
             }
             _ => Err(Error::InvalidPublicKey)?,
         }
@@ -314,12 +305,10 @@ impl Address {
     /// string to address
     pub fn from_str(str: &str) -> Result<Self> {
         let str = str.trim();
-        if str.len() == 34 && str.starts_with("T") {
+        let raw = if str.len() == 34 && str.starts_with("T") {
             // tron
             let mut raw = bs58::decode(str).into_vec()?;
-
             let check = raw.split_off(raw.len() - 4);
-
             let mut hasher = Sha256::new();
             hasher.update(&raw);
             let digest1 = hasher.finalize();
@@ -331,12 +320,12 @@ impl Address {
             if check != &digest[..4] {
                 Err(Error::InvalidAddress)?
             } else {
-                return Self::from_bytes(&raw);
+                raw
             }
         } else if str.starts_with("0x") {
             // eth
             let raw: Vec<u8> = str.trim_start_matches("0x").from_hex()?;
-            return Self::from_bytes(&raw);
+            raw
         } else {
             // eth | sol
             let raw: Vec<u8> = match str.from_hex() {
@@ -345,8 +334,10 @@ impl Address {
                     .into_vec()
                     .map_err(|_| Error::InvalidAddress)?,
             };
-            Self::from_bytes(&raw)
-        }
+            raw
+        };
+
+        Self::from_bytes(&raw)
     }
 
     /// endless address from string
@@ -355,10 +346,10 @@ impl Address {
         if str.starts_with("0x") {
             let raw: Vec<u8> = str.trim_start_matches("0x").from_hex()?;
             let len = raw.len();
-            if len != ADDRESS_EDS_SIZE {
-                let mut byte = [0u8; ADDRESS_EDS_SIZE];
+            if len != ADDRESS_B32_SIZE {
+                let mut byte = [0u8; ADDRESS_B32_SIZE];
                 byte[raw.len() - 1..].copy_from_slice(&raw);
-                Ok(Self::EDS(byte))
+                Ok(Self::B32(byte))
             } else {
                 Self::eds_from_bytes(&raw)
             }
@@ -382,7 +373,7 @@ impl serde::Serialize for Address {
         if s.is_human_readable() {
             s.serialize_str(&self.to_str())
         } else {
-            s.serialize_bytes(&self.as_bytes())
+            s.serialize_bytes(self.as_bytes())
         }
     }
 }
