@@ -9,6 +9,9 @@ pub const SECRET_KEY_SIZE: usize = 32;
 #[derive(Debug, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey([u8; SECRET_KEY_SIZE]);
 
+#[derive(Debug, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
+pub struct SecreKey64(pub [u8; 64]);
+
 impl Clone for SecretKey {
     fn clone(&self) -> Self {
         Self(self.0)
@@ -23,7 +26,9 @@ impl SecretKey {
             let mut ret = [0u8; SECRET_KEY_SIZE];
             rng.fill_bytes(&mut ret);
             if secp256k1::SecretKey::from_slice(&ret).is_ok() {
-                return Self(ret);
+                let sk = Self(ret);
+                ret.zeroize();
+                return sk;
             }
         }
     }
@@ -32,7 +37,9 @@ impl SecretKey {
         let mut rng = rand::rngs::OsRng {};
         let mut ret = [0u8; SECRET_KEY_SIZE];
         rng.fill_bytes(&mut ret);
-        return Self(ret);
+        let sk = Self(ret);
+        ret.zeroize();
+        sk
     }
     /// to secp256k1
     pub fn to_secp256k1(&self) -> secp256k1::SecretKey {
@@ -48,9 +55,13 @@ impl SecretKey {
     }
     /// build from raw bytes
     pub fn from_bytes(raw: &[u8]) -> Result<Self> {
-        if let Ok(ret) = <[u8; SECRET_KEY_SIZE]>::try_from(&raw[..32]) {
+        if let Ok(mut ret) = <[u8; SECRET_KEY_SIZE]>::try_from(&raw[..32]) {
             if secp256k1::SecretKey::from_slice(&ret).is_ok() {
-                return Ok(Self(ret));
+                let sk = Self(ret);
+                ret.zeroize();
+                return Ok(sk);
+            } else {
+                ret.zeroize();
             }
         }
         Err(Error::InvalidSecretKey)
@@ -60,8 +71,8 @@ impl SecretKey {
         &self.0
     }
     /// get [u8; 32]
-    pub fn to_bytes(&self) -> [u8; 32] {
-        self.0
+    pub fn to_bytes(&self) -> &[u8; 32] {
+        &self.0
     }
     /// build from string
     pub fn from_str(str: &str) -> Result<Self> {
@@ -91,19 +102,18 @@ impl SecretKey {
         self.0.to_hex()
     }
     /// to sol raw bytes
-    pub fn to_sol_bytes(&self) -> [u8; 64] {
+    pub fn to_sol_bytes(&self) -> SecreKey64 {
         let mut raw: [u8; 64] = [0u8; 64];
         raw[..32].copy_from_slice(&self.0);
         let pubkey = ed25519_dalek::VerifyingKey::from(&self.to_ed25519());
         raw[32..].copy_from_slice(pubkey.as_bytes());
-        raw
+        let sk64 = SecreKey64(raw);
+        raw.zeroize();
+        sk64
     }
     /// to sol string, base58
     pub fn to_sol(&self) -> String {
-        let mut raw = self.to_sol_bytes();
-        let str = bs58::encode(&raw).into_string();
-        raw.zeroize();
-        str
+        bs58::encode(&self.to_sol_bytes().0).into_string()
     }
 }
 
