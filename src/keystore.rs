@@ -9,14 +9,16 @@ use std::collections::HashMap;
 use std::path::PathBuf;
 use std::sync::RwLock;
 use std::{fs, u8};
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 // key cache memory
 static SECRETS: Lazy<RwLock<HashMap<String, SecretKey>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq)]
+#[derive(Clone, Debug, Hash, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
 pub struct Keystore {
     secret: SecretKey,
+    #[zeroize(skip)]
     path: PathBuf,
     pwd: Vec<u8>,
 }
@@ -48,8 +50,9 @@ impl Keystore {
                     std::io::ErrorKind::NotFound => Error::InvalidPath(path),
                     _ => Error::Io(err),
                 })?;
-                let raw = crypto::decrypt(pwd, &code)?;
+                let mut raw = crypto::decrypt(pwd, &code)?;
                 let secret = SecretKey::from_bytes(&raw)?;
+                raw.zeroize();
                 SECRETS.write()?.insert(addr, secret.clone());
                 secret
             }
@@ -60,13 +63,14 @@ impl Keystore {
     /// save secret to file with address as filename
     pub fn save(&self, addr: &Address) -> Result<bool> {
         let addr = addr.to_hex();
-        let raw = crypto::encrypt(&self.pwd, self.secret.as_bytes())?;
+        let mut raw = crypto::encrypt(&self.pwd, self.secret.as_bytes())?;
         let path = self.path.join(&addr);
-        fs::write(&path, raw).map_err(|err| match err.kind() {
+        let fs_r = fs::write(&path, &raw).map_err(|err| match err.kind() {
             std::io::ErrorKind::NotFound => Error::InvalidPath(path),
             _ => Error::Io(err),
-        })?;
-        Ok(true)
+        });
+        raw.zeroize();
+        Ok(fs_r? == ())
     }
 
     /// delete secret file with address

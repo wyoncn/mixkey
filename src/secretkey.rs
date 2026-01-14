@@ -2,11 +2,18 @@ use crate::error::{Error, Result};
 use rand::RngCore;
 use rustc_hex::{FromHex, ToHex};
 use std::u8;
+use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const SECRET_KEY_SIZE: usize = 32;
 
-#[derive(Debug, PartialEq, Eq, Hash, Clone)]
+#[derive(Debug, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey([u8; SECRET_KEY_SIZE]);
+
+impl Clone for SecretKey {
+    fn clone(&self) -> Self {
+        Self(self.0)
+    }
+}
 
 impl SecretKey {
     /// ethereum secret, support ed25519 and secp256k1
@@ -54,11 +61,11 @@ impl SecretKey {
     }
     /// get [u8; 32]
     pub fn to_bytes(&self) -> [u8; 32] {
-        self.0.clone()
+        self.0
     }
     /// build from string
     pub fn from_str(str: &str) -> Result<Self> {
-        let raw: Vec<u8> = match str.starts_with("[") {
+        let mut raw: Vec<u8> = match str.starts_with("[") {
             true => {
                 let matchs: &[_] = &['[', ']'];
                 str.trim_matches(matchs)
@@ -71,7 +78,9 @@ impl SecretKey {
                 _ => bs58::decode(str).into_vec().unwrap(),
             },
         };
-        Self::from_bytes(&raw)
+        let sk = Self::from_bytes(&raw);
+        raw.zeroize();
+        sk
     }
     /// to base58 string
     pub fn to_bs58(&self) -> String {
@@ -91,7 +100,10 @@ impl SecretKey {
     }
     /// to sol string, base58
     pub fn to_sol(&self) -> String {
-        bs58::encode(self.to_sol_bytes()).into_string()
+        let mut raw = self.to_sol_bytes();
+        let str = bs58::encode(&raw).into_string();
+        raw.zeroize();
+        str
     }
 }
 
