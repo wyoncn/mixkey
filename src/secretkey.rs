@@ -6,10 +6,10 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 
 pub const SECRET_KEY_SIZE: usize = 32;
 
-#[derive(Debug, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SecretKey([u8; SECRET_KEY_SIZE]);
 
-#[derive(Debug, PartialEq, Eq, Hash, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct SecreKey64(pub [u8; 64]);
 
 impl Clone for SecretKey {

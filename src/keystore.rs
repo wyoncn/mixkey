@@ -15,7 +15,7 @@ use zeroize::{Zeroize, ZeroizeOnDrop};
 static SECRETS: Lazy<RwLock<HashMap<String, SecretKey>>> =
     Lazy::new(|| RwLock::new(HashMap::new()));
 
-#[derive(Clone, Debug, Hash, PartialEq, Eq, Zeroize, ZeroizeOnDrop)]
+#[derive(Zeroize, ZeroizeOnDrop)]
 pub struct Keystore {
     secret: SecretKey,
     #[zeroize(skip)]

@@ -11,7 +11,7 @@ const SIGNATURE_SECP256K1_SIZE: usize = 65;
 const SIGNATURE_ED25519_SIZE: usize = 64;
 const SIGNATURE_BLS12381_SIZE: usize = 96;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug)]
 pub enum Signature {
     SECP256K1([u8; SIGNATURE_SECP256K1_SIZE]),
     ED25519([u8; SIGNATURE_ED25519_SIZE]),
